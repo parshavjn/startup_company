@@ -1,0 +1,8 @@
+{
+  "name": "Recently Funded Tech Agent",
+  "description": "An intelligent agent that discovers recently funded companies, provides custom job hunting advice, and schedules weekly email updates.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
