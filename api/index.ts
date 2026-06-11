@@ -24,6 +24,95 @@ function getGeminiClient(): GoogleGenAI {
   });
 }
 
+// Robust helper function to execute content generation with model and feature fallbacks.
+async function generateContentRobust(
+  ai: GoogleGenAI,
+  prompt: string,
+  baseConfig: any
+): Promise<any> {
+  // Ordered preference of flash and pro models to handle capacity or demand issues.
+  const models = ['gemini-3.5-flash', 'gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-3.1-flash-lite', 'gemini-2.5-pro'];
+  
+  // Phase 1: Try with Search Grounding enabled if configured in the baseConfig
+  if (baseConfig.tools && baseConfig.tools.some((t: any) => t.googleSearch)) {
+    for (const model of models) {
+      try {
+        console.log(`[robust-gen] Attempting grounded search generation with model: ${model}...`);
+        const response = await ai.models.generateContent({
+          model: model,
+          contents: prompt,
+          config: baseConfig
+        });
+        return response;
+      } catch (err: any) {
+        const errMsg = err.message || JSON.stringify(err);
+        console.warn(`[robust-gen] Grounded generation failed for ${model}:`, errMsg);
+        
+        // If it's a 429 quota exhaustion (which implies search grounding is disabled on this API key's billing plan),
+        // skip trying grounding on other models, and transition directly to the static knowledge fallback phase.
+        if (errMsg.includes('429') || errMsg.includes('RESOURCE_EXHAUSTED') || errMsg.includes('quota')) {
+          console.warn("[robust-gen] Quota limit hit on grounded search. Skipping all grounded attempts and falling back to static generation.");
+          break;
+        }
+      }
+    }
+  }
+
+  // Phase 2: Fallback to static generation (without search grounding)
+  const { tools, ...staticConfig } = baseConfig;
+  let lastError: any = null;
+  
+  for (const model of models) {
+    try {
+      console.log(`[robust-gen] Attempting static knowledge generation with model: ${model}...`);
+      const response = await ai.models.generateContent({
+        model: model,
+        contents: prompt,
+        config: staticConfig
+      });
+      return response;
+    } catch (err: any) {
+      lastError = err;
+      const errMsg = err.message || JSON.stringify(err);
+      console.warn(`[robust-gen] Static generation failed for ${model}:`, errMsg);
+    }
+  }
+
+  throw lastError || new Error("All model candidates and configurations failed to generate content.");
+}
+
+// Helper to extract clean message and status code from model/upstream API errors
+function handleApiError(res: Response, error: any, defaultContext: string) {
+  let statusCode = 500;
+  let friendlyMessage = error.message || `An unexpected error occurred during ${defaultContext}.`;
+  
+  if (error.message && typeof error.message === 'string') {
+    try {
+      const parsed = JSON.parse(error.message);
+      const innerError = parsed.error || parsed;
+      if (innerError && innerError.message) {
+        friendlyMessage = innerError.message;
+      }
+      if (innerError && innerError.code) {
+        statusCode = Number(innerError.code);
+      }
+    } catch {
+      // Not JSON
+    }
+  }
+
+  // Ensure statusCode is a valid HTTP status code
+  if (statusCode < 100 || statusCode > 599) {
+    statusCode = 500;
+  }
+
+  res.status(statusCode).json({
+    success: false,
+    error: friendlyMessage,
+    code: statusCode
+  });
+}
+
 // 1. Health check
 app.get('/api/health', (req: Request, res: Response) => {
   res.json({
@@ -151,27 +240,13 @@ app.post('/api/search', async (req: Request, res: Response) => {
       }
     };
 
-    try {
-      response = await ai.models.generateContent({
-        model: 'gemini-3.5-flash',
-        contents: prompt,
-        config: configWithSearch
-      });
-    } catch (groundingError: any) {
-      console.warn('Google Search Grounding requires a billing account linked to your Gemini API project. Falling back to static knowledge-based generation:', groundingError.message || groundingError);
-      const { tools, ...configWithoutSearch } = configWithSearch;
-      response = await ai.models.generateContent({
-        model: 'gemini-3.5-flash',
-        contents: prompt,
-        config: configWithoutSearch
-      });
-    }
+    response = await generateContentRobust(ai, prompt, configWithSearch);
 
     const jsonText = response.text || '[]';
     res.json(JSON.parse(jsonText.trim()));
   } catch (error: any) {
     console.error('Error generating funded companies:', error);
-    res.status(500).json({ error: error.message });
+    handleApiError(res, error, 'company search and generation');
   }
 });
 
@@ -476,7 +551,7 @@ app.post('/api/send-email', async (req: Request, res: Response) => {
 
   } catch (error: any) {
     console.error('Error sending email:', error);
-    res.status(500).json({ error: error.message });
+    handleApiError(res, error, 'email dispatch');
   }
 });
 
@@ -589,21 +664,7 @@ app.get('/api/cron', async (req: Request, res: Response) => {
       }
     };
 
-    try {
-      modelResponse = await ai.models.generateContent({
-        model: 'gemini-3.5-flash',
-        contents: prompt,
-        config: configWithSearchCron
-      });
-    } catch (groundingError: any) {
-      console.warn('Cron search grounding failed, retrying without search grounding:', groundingError.message || groundingError);
-      const { tools, ...configWithoutSearchCron } = configWithSearchCron;
-      modelResponse = await ai.models.generateContent({
-        model: 'gemini-3.5-flash',
-        contents: prompt,
-        config: configWithoutSearchCron
-      });
-    }
+    modelResponse = await generateContentRobust(ai, prompt, configWithSearchCron);
 
     const companies = JSON.parse(modelResponse.text || '[]');
 
@@ -655,7 +716,7 @@ app.get('/api/cron', async (req: Request, res: Response) => {
 
   } catch (error: any) {
     console.error('Fatal automated cron trigger failure:', error);
-    res.status(500).json({ error: error.message });
+    handleApiError(res, error, 'weekly cron execution');
   }
 });
 

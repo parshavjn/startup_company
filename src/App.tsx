@@ -468,8 +468,18 @@ export default function App() {
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || 'Server-side API search error');
+        let errMsg = '';
+        try {
+          const errJson = await response.json();
+          errMsg = errJson.error || errJson.message;
+        } catch {
+          // not json
+        }
+        if (!errMsg) {
+          const errText = await response.text();
+          errMsg = errText || 'Server-side API search error';
+        }
+        throw new Error(errMsg);
       }
 
       const freshCompaniesList = await response.json();
@@ -515,8 +525,18 @@ export default function App() {
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || 'Failed to dispatch email');
+        let errMsg = '';
+        try {
+          const errJson = await response.json();
+          errMsg = errJson.error || errJson.message;
+        } catch {
+          // not json
+        }
+        if (!errMsg) {
+          const errText = await response.text();
+          errMsg = errText || 'Failed to dispatch email';
+        }
+        throw new Error(errMsg);
       }
 
       const result = await response.json();
