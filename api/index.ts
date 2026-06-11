@@ -68,91 +68,104 @@ app.post('/api/search', async (req: Request, res: Response) => {
     3. Actionable cold outreach templates and conversation starters for their key executives or hiring teams.
     4. Practical, targeted technical and domain interview preparation guides (e.g., topics, technologies to learn before the interview).`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.5-flash',
-      contents: prompt,
-      config: {
-        // Enable search grounding to get real, recent facts
-        tools: [{ googleSearch: {} }],
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.ARRAY,
-          description: 'A list of recently funded tech companies with customized job application guidelines',
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              name: { type: Type.STRING, description: 'The official name of the company' },
-              fundingAmount: { type: Type.STRING, description: 'The funding amount raised (e.g. $15M, $5.2M)' },
-              fundingRound: { type: Type.STRING, description: 'The funding stage (e.g. Seed, Series A, Series B, Grant)' },
-              date: { type: Type.STRING, description: 'The date or month of funding announcement in 2025/2026' },
-              industry: { type: Type.STRING, description: 'The primary industry or area of work' },
-              description: { type: Type.STRING, description: 'A 2-3 sentence overview of their product, business, and what they do' },
-              website: { type: Type.STRING, description: 'The estimated or real corporate website URL' },
-              headquarters: { type: Type.STRING, description: 'City and state/country of headquarters' },
-              investors: { type: Type.STRING, description: 'Key lead investors or VC firms involved in this funding round (e.g., Peak XV Partners, Accel, Elevation Capital)' },
-              contactEmail: { type: Type.STRING, description: 'Corporate careers or engineering recruitment email contact ID (e.g., careers@company.com or contact@company.co)' },
-              keyMembers: {
-                type: Type.ARRAY,
-                description: 'List of 2-3 key executive founders, co-founders, or key engineering leaders (e.g., CEO, CTO) with their real or estimated LinkedIn profile link',
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    name: { type: Type.STRING, description: 'Full name of the executive' },
-                    role: { type: Type.STRING, description: 'Designation / job title (e.g., Co-founder & CEO)' },
-                    linkedin: { type: Type.STRING, description: 'Absolute LinkedIn URL of the person' }
-                  },
-                  required: ['name', 'role', 'linkedin']
-                }
-              },
-              pastJobs: {
-                type: Type.ARRAY,
-                description: '2-3 key past or recently filled engineering / tech roles',
-                items: { type: Type.STRING }
-              },
-              futureJobs: {
-                type: Type.ARRAY,
-                description: '2-3 expected, future, or upcoming tech roles based on their recent funding expansion',
-                items: { type: Type.STRING }
-              },
-              jobSearchGuideline: {
+    let response;
+    const configWithSearch = {
+      // Enable search grounding to get real, recent facts
+      tools: [{ googleSearch: {} }],
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: Type.ARRAY,
+        description: 'A list of recently funded tech companies with customized job application guidelines',
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            name: { type: Type.STRING, description: 'The official name of the company' },
+            fundingAmount: { type: Type.STRING, description: 'The funding amount raised (e.g. $15M, $5.2M)' },
+            fundingRound: { type: Type.STRING, description: 'The funding stage (e.g. Seed, Series A, Series B, Grant)' },
+            date: { type: Type.STRING, description: 'The date or month of funding announcement in 2025/2026' },
+            industry: { type: Type.STRING, description: 'The primary industry or area of work' },
+            description: { type: Type.STRING, description: 'A 2-3 sentence overview of their product, business, and what they do' },
+            website: { type: Type.STRING, description: 'The estimated or real corporate website URL' },
+            headquarters: { type: Type.STRING, description: 'City and state/country of headquarters' },
+            investors: { type: Type.STRING, description: 'Key lead investors or VC firms involved in this funding round (e.g., Peak XV Partners, Accel, Elevation Capital)' },
+            contactEmail: { type: Type.STRING, description: 'Corporate careers or engineering recruitment email contact ID (e.g., careers@company.com or contact@company.co)' },
+            keyMembers: {
+              type: Type.ARRAY,
+              description: 'List of 2-3 key executive founders, co-founders, or key engineering leaders (e.g., CEO, CTO) with their real or estimated LinkedIn profile link',
+              items: {
                 type: Type.OBJECT,
                 properties: {
-                  generalStrategy: { 
-                    type: Type.STRING, 
-                    description: 'Tactic on how to position oneself as a candidate. How does their recent funding announcement signal immediate hiring or engineering expansion needs?' 
-                  },
-                  specificRoles: {
-                    type: Type.ARRAY,
-                    description: 'Role-specific application advice',
-                    items: {
-                      type: Type.OBJECT,
-                      properties: {
-                        role: { type: Type.STRING, description: 'The exact target role name' },
-                        advice: { type: Type.STRING, description: 'Actionable targeted advice explaining exactly how to structure the resume/GitHub to catch this company\'s attention' }
-                      },
-                      required: ['role', 'advice']
-                    }
-                  },
-                  contactTips: { 
-                    type: Type.STRING, 
-                    description: 'A brief template or specific LinkedIn message concept to send to their decision-makers (CTO, VP of Engineering, Recruiter)' 
-                  },
-                  interviewTips: { 
-                    type: Type.STRING, 
-                    description: 'Specific technical topics, architectural challenges, or domain knowledge they will likely test on during the interviews' 
-                  }
+                  name: { type: Type.STRING, description: 'Full name of the executive' },
+                  role: { type: Type.STRING, description: 'Designation / job title (e.g., Co-founder & CEO)' },
+                  linkedin: { type: Type.STRING, description: 'Absolute LinkedIn URL of the person' }
                 },
-                required: ['generalStrategy', 'specificRoles', 'contactTips', 'interviewTips']
+                required: ['name', 'role', 'linkedin']
               }
             },
-            required: [
-              'name', 'fundingAmount', 'fundingRound', 'date', 'industry', 
-              'description', 'website', 'headquarters', 'investors', 'contactEmail', 'keyMembers', 'pastJobs', 'futureJobs', 'jobSearchGuideline'
-            ]
-          }
+            pastJobs: {
+              type: Type.ARRAY,
+              description: '2-3 key past or recently filled engineering / tech roles',
+              items: { type: Type.STRING }
+            },
+            futureJobs: {
+              type: Type.ARRAY,
+              description: '2-3 expected, future, or upcoming tech roles based on their recent funding expansion',
+              items: { type: Type.STRING }
+            },
+            jobSearchGuideline: {
+              type: Type.OBJECT,
+              properties: {
+                generalStrategy: { 
+                  type: Type.STRING, 
+                  description: 'Tactic on how to position oneself as a candidate. How does their recent funding announcement signal immediate hiring or engineering expansion needs?' 
+                },
+                specificRoles: {
+                  type: Type.ARRAY,
+                  description: 'Role-specific application advice',
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      role: { type: Type.STRING, description: 'The exact target role name' },
+                      advice: { type: Type.STRING, description: 'Actionable targeted advice explaining exactly how to structure the resume/GitHub to catch this company\'s attention' }
+                    },
+                    required: ['role', 'advice']
+                  }
+                },
+                contactTips: { 
+                  type: Type.STRING, 
+                  description: 'A brief template or specific LinkedIn message concept to send to their decision-makers (CTO, VP of Engineering, Recruiter)' 
+                },
+                interviewTips: { 
+                  type: Type.STRING, 
+                  description: 'Specific technical topics, architectural challenges, or domain knowledge they will likely test on during the interviews' 
+                }
+              },
+              required: ['generalStrategy', 'specificRoles', 'contactTips', 'interviewTips']
+            }
+          },
+          required: [
+            'name', 'fundingAmount', 'fundingRound', 'date', 'industry', 
+            'description', 'website', 'headquarters', 'investors', 'contactEmail', 'keyMembers', 'pastJobs', 'futureJobs', 'jobSearchGuideline'
+          ]
         }
       }
-    });
+    };
+
+    try {
+      response = await ai.models.generateContent({
+        model: 'gemini-3.5-flash',
+        contents: prompt,
+        config: configWithSearch
+      });
+    } catch (groundingError: any) {
+      console.warn('Google Search Grounding requires a billing account linked to your Gemini API project. Falling back to static knowledge-based generation:', groundingError.message || groundingError);
+      const { tools, ...configWithoutSearch } = configWithSearch;
+      response = await ai.models.generateContent({
+        model: 'gemini-3.5-flash',
+        contents: prompt,
+        config: configWithoutSearch
+      });
+    }
 
     const jsonText = response.text || '[]';
     res.json(JSON.parse(jsonText.trim()));
@@ -511,73 +524,86 @@ app.get('/api/cron', async (req: Request, res: Response) => {
     
     Provide standard JSON matching our format scheme.`;
 
-    const modelResponse = await ai.models.generateContent({
-      model: 'gemini-3.5-flash',
-      contents: prompt,
-      config: {
-        tools: [{ googleSearch: {} }],
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              name: { type: Type.STRING },
-              fundingAmount: { type: Type.STRING },
-              fundingRound: { type: Type.STRING },
-              date: { type: Type.STRING },
-              industry: { type: Type.STRING },
-              description: { type: Type.STRING },
-              website: { type: Type.STRING },
-              headquarters: { type: Type.STRING },
-              investors: { type: Type.STRING },
-              contactEmail: { type: Type.STRING },
-              keyMembers: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    name: { type: Type.STRING },
-                    role: { type: Type.STRING },
-                    linkedin: { type: Type.STRING }
-                  },
-                  required: ['name', 'role', 'linkedin']
-                }
-              },
-              pastJobs: {
-                type: Type.ARRAY,
-                items: { type: Type.STRING }
-              },
-              futureJobs: {
-                type: Type.ARRAY,
-                items: { type: Type.STRING }
-              },
-              jobSearchGuideline: {
+    let modelResponse;
+    const configWithSearchCron = {
+      tools: [{ googleSearch: {} }],
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            name: { type: Type.STRING },
+            fundingAmount: { type: Type.STRING },
+            fundingRound: { type: Type.STRING },
+            date: { type: Type.STRING },
+            industry: { type: Type.STRING },
+            description: { type: Type.STRING },
+            website: { type: Type.STRING },
+            headquarters: { type: Type.STRING },
+            investors: { type: Type.STRING },
+            contactEmail: { type: Type.STRING },
+            keyMembers: {
+              type: Type.ARRAY,
+              items: {
                 type: Type.OBJECT,
                 properties: {
-                  generalStrategy: { type: Type.STRING },
-                  specificRoles: {
-                    type: Type.ARRAY,
-                    items: {
-                      type: Type.OBJECT,
-                      properties: {
-                        role: { type: Type.STRING },
-                        advice: { type: Type.STRING }
-                      },
-                      required: ['role', 'advice']
-                    }
-                  },
-                  contactTips: { type: Type.STRING },
-                  interviewTips: { type: Type.STRING }
+                  name: { type: Type.STRING },
+                  role: { type: Type.STRING },
+                  linkedin: { type: Type.STRING }
                 },
-                required: ['generalStrategy', 'specificRoles', 'contactTips', 'interviewTips']
+                required: ['name', 'role', 'linkedin']
               }
             },
-            required: ['name', 'fundingAmount', 'fundingRound', 'date', 'industry', 'description', 'website', 'headquarters', 'investors', 'contactEmail', 'keyMembers', 'pastJobs', 'futureJobs', 'jobSearchGuideline']
-          }
+            pastJobs: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING }
+            },
+            futureJobs: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING }
+            },
+            jobSearchGuideline: {
+              type: Type.OBJECT,
+              properties: {
+                generalStrategy: { type: Type.STRING },
+                specificRoles: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      role: { type: Type.STRING },
+                      advice: { type: Type.STRING }
+                    },
+                    required: ['role', 'advice']
+                  }
+                },
+                contactTips: { type: Type.STRING },
+                interviewTips: { type: Type.STRING }
+              },
+              required: ['generalStrategy', 'specificRoles', 'contactTips', 'interviewTips']
+            }
+          },
+          required: ['name', 'fundingAmount', 'fundingRound', 'date', 'industry', 'description', 'website', 'headquarters', 'investors', 'contactEmail', 'keyMembers', 'pastJobs', 'futureJobs', 'jobSearchGuideline']
         }
       }
-    });
+    };
+
+    try {
+      modelResponse = await ai.models.generateContent({
+        model: 'gemini-3.5-flash',
+        contents: prompt,
+        config: configWithSearchCron
+      });
+    } catch (groundingError: any) {
+      console.warn('Cron search grounding failed, retrying without search grounding:', groundingError.message || groundingError);
+      const { tools, ...configWithoutSearchCron } = configWithSearchCron;
+      modelResponse = await ai.models.generateContent({
+        model: 'gemini-3.5-flash',
+        contents: prompt,
+        config: configWithoutSearchCron
+      });
+    }
 
     const companies = JSON.parse(modelResponse.text || '[]');
 
