@@ -113,6 +113,47 @@ function handleApiError(res: Response, error: any, defaultContext: string) {
   });
 }
 
+// Helper to query Tavily AI for clean, LLM-optimized live search results
+async function searchTavily(query: string): Promise<string> {
+  const apiKey = process.env.TAVILY_API_KEY;
+  if (!apiKey) {
+    throw new Error('TAVILY_API_KEY environment variable is not configured.');
+  }
+
+  const response = await fetch('https://api.tavily.com/search', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      api_key: apiKey,
+      query: query,
+      search_depth: 'basic',
+      max_results: 6
+    })
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Tavily search API failed: ${errorText}`);
+  }
+
+  const data = await response.json();
+  const results = data.results || [];
+  
+  if (results.length === 0) {
+    return 'No recent search results found for: ' + query;
+  }
+
+  return results.map((r: any, idx: number) => {
+    return `[Search Result #${idx + 1}]
+Title: ${r.title}
+Source URL: ${r.url}
+Content Snippet: ${r.content}
+`;
+  }).join('\n---\n\n');
+}
+
 // 1. Health check
 app.get('/api/health', (req: Request, res: Response) => {
   res.json({
@@ -137,25 +178,60 @@ app.post('/api/search', async (req: Request, res: Response) => {
 
     const ai = getGeminiClient();
     
-    // Set current date context (Current system time is June 2026)
-    const prompt = `Search for 4-5 real tech startups/companies based in India (with headquarters in Indian cities like Bengaluru, Mumbai, Delhi NCR, Gurgaon, Noida, Hyderabad, Pune, Chennai, etc.) that announced venture capital funding rounds (Seed, Series A, Series B, Series C, etc.) recently in late 2025 or early-middle 2026. Key filtering preference: Industry style is "${industries}". You MUST ONLY return real Indian companies.
-    
-    For each company found, resolve and extract the active VC investors/funding participants who led or participated in this round, as well as a recruitment or general contact email ID.
-    
-    Also, identify 2-3 key startup team members, co-founders, or engineering leaders (e.g., CEO, CTO, VP Engineering) with realistic or real LinkedIn profile URLs.
+    let tavilyResults = '';
+    let useTavily = false;
 
-    Additionally, identify 2-3 past job openings that were recently filled or active (e.g. "Senior Backend Engineer (Go) - Closed Q1 2026") and 2-3 future/expected job roles that they are likely hiring for next (e.g. "Lead React UI Developer - Expected Q3 2026").
-    
-    For each company found, generate beautiful, high-value, highly specific job search guidelines tailored for a candidate with the following profile:
-    - Target Roles: ${rolesList}
-    - Key Skills: ${skillsList}
-    - Location preference: ${location}
+    if (process.env.TAVILY_API_KEY) {
+      try {
+        const searchQuery = `venture capital funding rounds startups India announced 2025 2026 ${industries}`;
+        console.log(`[tavily] Performing Tavily search for: "${searchQuery}"`);
+        tavilyResults = await searchTavily(searchQuery);
+        useTavily = true;
+      } catch (tavilyError: any) {
+        console.error('[tavily] Tavily search failed, falling back to Google Search Grounding:', tavilyError.message || tavilyError);
+      }
+    }
 
-    Provide the output in standard JSON format conforming strictly to the requested schema. Ensure all fields are filled with realistic, search-validated, and highly customized advice, including:
-    1. Realistic, specific tactics to land a ${rolesList} role at each of these companies given their specific industry and product.
-    2. Bulleted custom advice for specific roles.
-    3. Actionable cold outreach templates and conversation starters for their key executives or hiring teams.
-    4. Practical, targeted technical and domain interview preparation guides (e.g., topics, technologies to learn before the interview).`;
+    const prompt = useTavily
+      ? `Using the following live search results from Tavily, extract 4-5 real tech startups/companies based in India (with headquarters in Indian cities like Bengaluru, Mumbai, Delhi NCR, Gurgaon, Noida, Hyderabad, Pune, Chennai, etc.) that announced venture capital funding rounds (Seed, Series A, Series B, Series C, etc.) recently in late 2025 or early-middle 2026. Key filtering preference: Industry style is "${industries}". You MUST ONLY return real Indian companies found in the search results context.
+      
+Live Web Search Results Context:
+${tavilyResults}
+
+For each company found, resolve and extract the active VC investors/funding participants who led or participated in this round, as well as a recruitment or general contact email ID.
+      
+Also, identify 2-3 key startup team members, co-founders, or engineering leaders (e.g., CEO, CTO, VP Engineering) with realistic or real LinkedIn profile URLs.
+
+Additionally, identify 2-3 past job openings that were recently filled or active (e.g. "Senior Backend Engineer (Go) - Closed Q1 2026") and 2-3 future/expected job roles that they are likely hiring for next (e.g. "Lead React UI Developer - Expected Q3 2026").
+      
+For each company found, generate beautiful, high-value, highly specific job search guidelines tailored for a candidate with the following profile:
+- Target Roles: ${rolesList}
+- Key Skills: ${skillsList}
+- Location preference: ${location}
+
+Provide the output in standard JSON format conforming strictly to the requested schema. Ensure all fields are filled with realistic, search-validated, and highly customized advice, including:
+1. Realistic, specific tactics to land a ${rolesList} role at each of these companies given their specific industry and product.
+2. Bulleted custom advice for specific roles.
+3. Actionable cold outreach templates and conversation starters for their key executives or hiring teams.
+4. Practical, targeted technical and domain interview preparation guides (e.g., topics, technologies to learn before the interview).`
+      : `Search for 4-5 real tech startups/companies based in India (with headquarters in Indian cities like Bengaluru, Mumbai, Delhi NCR, Gurgaon, Noida, Hyderabad, Pune, Chennai, etc.) that announced venture capital funding rounds (Seed, Series A, Series B, Series C, etc.) recently in late 2025 or early-middle 2026. Key filtering preference: Industry style is "${industries}". You MUST ONLY return real Indian companies.
+      
+For each company found, resolve and extract the active VC investors/funding participants who led or participated in this round, as well as a recruitment or general contact email ID.
+      
+Also, identify 2-3 key startup team members, co-founders, or engineering leaders (e.g., CEO, CTO, VP Engineering) with realistic or real LinkedIn profile URLs.
+
+Additionally, identify 2-3 past job openings that were recently filled or active (e.g. "Senior Backend Engineer (Go) - Closed Q1 2026") and 2-3 future/expected job roles that they are likely hiring for next (e.g. "Lead React UI Developer - Expected Q3 2026").
+      
+For each company found, generate beautiful, high-value, highly specific job search guidelines tailored for a candidate with the following profile:
+- Target Roles: ${rolesList}
+- Key Skills: ${skillsList}
+- Location preference: ${location}
+
+Provide the output in standard JSON format conforming strictly to the requested schema. Ensure all fields are filled with realistic, search-validated, and highly customized advice, including:
+1. Realistic, specific tactics to land a ${rolesList} role at each of these companies given their specific industry and product.
+2. Bulleted custom advice for specific roles.
+3. Actionable cold outreach templates and conversation starters for their key executives or hiring teams.
+4. Practical, targeted technical and domain interview preparation guides (e.g., topics, technologies to learn before the interview).`;
 
     let response;
     const configWithSearch = {
@@ -240,7 +316,13 @@ app.post('/api/search', async (req: Request, res: Response) => {
       }
     };
 
-    response = await generateContentRobust(ai, prompt, configWithSearch);
+    let config = configWithSearch;
+    if (useTavily) {
+      const { tools, ...configWithoutSearch } = configWithSearch;
+      config = configWithoutSearch;
+    }
+
+    response = await generateContentRobust(ai, prompt, config);
 
     const jsonText = response.text || '[]';
     res.json(JSON.parse(jsonText.trim()));
@@ -584,20 +666,53 @@ app.get('/api/cron', async (req: Request, res: Response) => {
 
     // 1. Core Gemini Discovery
     const ai = getGeminiClient();
-    const prompt = `Search for 4 tech startups/companies based in India (with headquarters in Indian cities like Bengaluru, Mumbai, Delhi NCR, Gurgaon, Noida, Hyderabad, Pune, Chennai, etc.) that announced venture capital funding announcements (Seed, Series A, Series B, Series C, etc.) recently in late 2025 or early-middle 2026. You MUST ONLY return real Indian companies. Prioritize tech sectors: "${industryPref.join(', ')}".
-    
-    For each company found, resolve and extract the active VC investors/funding participants who led or participated in this round, as well as a recruitment or general contact email ID.
-    
-    Also, identify 2-3 key startup team members, co-founders, or engineering leaders (e.g., CEO, CTO, VP Engineering) with realistic or real LinkedIn profile URLs.
 
-    Additionally, identify 2-3 past job openings that were recently filled or active (e.g. "Senior Backend Engineer (Go) - Closed Q1 2026") and 2-3 future/expected job roles that they are likely hiring for next (e.g. "Lead React UI Developer - Expected Q3 2026").
+    let tavilyResults = '';
+    let useTavily = false;
     
-    Format the output tailored for:
-    - Target Roles: ${targetRoles.join(', ')}
-    - Key Skills: ${targetSkills.join(', ')}
-    - Location preference: ${locationPref}
-    
-    Provide standard JSON matching our format scheme.`;
+    if (process.env.TAVILY_API_KEY) {
+      try {
+        const searchQuery = `venture capital funding rounds startups India announced 2025 2026 ${industryPref.join(', ')}`;
+        console.log(`[cron-tavily] Performing Tavily search for: "${searchQuery}"`);
+        tavilyResults = await searchTavily(searchQuery);
+        useTavily = true;
+      } catch (tavilyError: any) {
+        console.error('[cron-tavily] Tavily search failed, falling back to Google Search Grounding:', tavilyError.message || tavilyError);
+      }
+    }
+
+    const prompt = useTavily
+      ? `Using the following live search results from Tavily, extract 4 real tech startups/companies based in India (with headquarters in Indian cities like Bengaluru, Mumbai, Delhi NCR, Gurgaon, Noida, Hyderabad, Pune, Chennai, etc.) that announced venture capital funding announcements (Seed, Series A, Series B, Series C, etc.) recently in late 2025 or early-middle 2026. You MUST ONLY return real Indian companies found in the search results context.
+      
+Live Web Search Results Context:
+${tavilyResults}
+
+For each company found, resolve and extract the active VC investors/funding participants who led or participated in this round, as well as a recruitment or general contact email ID.
+      
+Also, identify 2-3 key startup team members, co-founders, or engineering leaders (e.g., CEO, CTO, VP Engineering) with realistic or real LinkedIn profile URLs.
+
+Additionally, identify 2-3 past job openings that were recently filled or active (e.g. "Senior Backend Engineer (Go) - Closed Q1 2026") and 2-3 future/expected job roles that they are likely hiring for next (e.g. "Lead React UI Developer - Expected Q3 2026").
+      
+Format the output tailored for:
+- Target Roles: ${targetRoles.join(', ')}
+- Key Skills: ${targetSkills.join(', ')}
+- Location preference: ${locationPref}
+      
+Provide standard JSON matching our format scheme.`
+      : `Search for 4 tech startups/companies based in India (with headquarters in Indian cities like Bengaluru, Mumbai, Delhi NCR, Gurgaon, Noida, Hyderabad, Pune, Chennai, etc.) that announced venture capital funding announcements (Seed, Series A, Series B, Series C, etc.) recently in late 2025 or early-middle 2026. You MUST ONLY return real Indian companies. Prioritize tech sectors: "${industryPref.join(', ')}".
+      
+For each company found, resolve and extract the active VC investors/funding participants who led or participated in this round, as well as a recruitment or general contact email ID.
+      
+Also, identify 2-3 key startup team members, co-founders, or engineering leaders (e.g., CEO, CTO, VP Engineering) with realistic or real LinkedIn profile URLs.
+
+Additionally, identify 2-3 past job openings that were recently filled or active (e.g. "Senior Backend Engineer (Go) - Closed Q1 25/26") and 2-3 future/expected job roles that they are likely hiring for next (e.g. "Lead React UI Developer - Expected Q3 25/26").
+      
+Format the output tailored for:
+- Target Roles: ${targetRoles.join(', ')}
+- Key Skills: ${targetSkills.join(', ')}
+- Location preference: ${locationPref}
+      
+Provide standard JSON matching our format scheme.`;
 
     let modelResponse;
     const configWithSearchCron = {
@@ -664,7 +779,13 @@ app.get('/api/cron', async (req: Request, res: Response) => {
       }
     };
 
-    modelResponse = await generateContentRobust(ai, prompt, configWithSearchCron);
+    let configCron = configWithSearchCron;
+    if (useTavily) {
+      const { tools, ...configWithoutSearchCron } = configWithSearchCron;
+      configCron = configWithoutSearchCron;
+    }
+
+    modelResponse = await generateContentRobust(ai, prompt, configCron);
 
     const companies = JSON.parse(modelResponse.text || '[]');
 
