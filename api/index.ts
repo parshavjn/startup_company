@@ -183,7 +183,7 @@ app.post('/api/search', async (req: Request, res: Response) => {
 
     if (process.env.TAVILY_API_KEY) {
       try {
-        const searchQuery = `venture capital funding rounds startups India announced 2025 2026 ${industries}`;
+        const searchQuery = `venture capital funding rounds startups India announced 2025 2026 AI SaaS ${industries}`;
         console.log(`[tavily] Performing Tavily search for: "${searchQuery}"`);
         tavilyResults = await searchTavily(searchQuery);
         useTavily = true;
@@ -195,6 +195,10 @@ app.post('/api/search', async (req: Request, res: Response) => {
     const prompt = useTavily
       ? `Using the following live search results from Tavily, extract 4-5 real tech startups/companies based in India (with headquarters in Indian cities like Bengaluru, Mumbai, Delhi NCR, Gurgaon, Noida, Hyderabad, Pune, Chennai, etc.) that announced venture capital funding rounds (Seed, Series A, Series B, Series C, etc.) recently in late 2025 or early-middle 2026. Key filtering preference: Industry style is "${industries}". You MUST ONLY return real Indian companies found in the search results context.
       
+CRITICAL FILTERING CRITERIA:
+- Every company returned MUST strictly be an AI SaaS (Software-as-a-Service leveraging Artificial Intelligence) startup.
+- DO NOT return companies focused on hardware, real estate, manufacturing, traditional consulting, or basic retail/e-commerce without a core AI software subscription model.
+
 Live Web Search Results Context:
 ${tavilyResults}
 
@@ -216,6 +220,10 @@ Provide the output in standard JSON format conforming strictly to the requested 
 4. Practical, targeted technical and domain interview preparation guides (e.g., topics, technologies to learn before the interview).`
       : `Search for 4-5 real tech startups/companies based in India (with headquarters in Indian cities like Bengaluru, Mumbai, Delhi NCR, Gurgaon, Noida, Hyderabad, Pune, Chennai, etc.) that announced venture capital funding rounds (Seed, Series A, Series B, Series C, etc.) recently in late 2025 or early-middle 2026. Key filtering preference: Industry style is "${industries}". You MUST ONLY return real Indian companies.
       
+CRITICAL FILTERING CRITERIA:
+- Every company returned MUST strictly be an AI SaaS (Software-as-a-Service leveraging Artificial Intelligence) startup.
+- DO NOT return companies focused on hardware, real estate, manufacturing, traditional consulting, or basic retail/e-commerce without a core AI software subscription model.
+
 For each company found, resolve and extract the active VC investors/funding participants who led or participated in this round, as well as a recruitment or general contact email ID.
       
 Also, identify 2-3 key startup team members, co-founders, or engineering leaders (e.g., CEO, CTO, VP Engineering) with realistic or real LinkedIn profile URLs.
@@ -672,7 +680,7 @@ app.get('/api/cron', async (req: Request, res: Response) => {
     
     if (process.env.TAVILY_API_KEY) {
       try {
-        const searchQuery = `venture capital funding rounds startups India announced 2025 2026 ${industryPref.join(', ')}`;
+        const searchQuery = `venture capital funding rounds startups India announced 2025 2026 AI SaaS ${industryPref.join(', ')}`;
         console.log(`[cron-tavily] Performing Tavily search for: "${searchQuery}"`);
         tavilyResults = await searchTavily(searchQuery);
         useTavily = true;
@@ -684,6 +692,10 @@ app.get('/api/cron', async (req: Request, res: Response) => {
     const prompt = useTavily
       ? `Using the following live search results from Tavily, extract 4 real tech startups/companies based in India (with headquarters in Indian cities like Bengaluru, Mumbai, Delhi NCR, Gurgaon, Noida, Hyderabad, Pune, Chennai, etc.) that announced venture capital funding announcements (Seed, Series A, Series B, Series C, etc.) recently in late 2025 or early-middle 2026. You MUST ONLY return real Indian companies found in the search results context.
       
+CRITICAL FILTERING CRITERIA:
+- Every company returned MUST strictly be an AI SaaS (Software-as-a-Service leveraging Artificial Intelligence) startup.
+- DO NOT return companies focused on hardware, real estate, manufacturing, traditional consulting, or basic retail/e-commerce without a core AI software subscription model.
+
 Live Web Search Results Context:
 ${tavilyResults}
 
@@ -701,6 +713,10 @@ Format the output tailored for:
 Provide standard JSON matching our format scheme.`
       : `Search for 4 tech startups/companies based in India (with headquarters in Indian cities like Bengaluru, Mumbai, Delhi NCR, Gurgaon, Noida, Hyderabad, Pune, Chennai, etc.) that announced venture capital funding announcements (Seed, Series A, Series B, Series C, etc.) recently in late 2025 or early-middle 2026. You MUST ONLY return real Indian companies. Prioritize tech sectors: "${industryPref.join(', ')}".
       
+CRITICAL FILTERING CRITERIA:
+- Every company returned MUST strictly be an AI SaaS (Software-as-a-Service leveraging Artificial Intelligence) startup.
+- DO NOT return companies focused on hardware, real estate, manufacturing, traditional consulting, or basic retail/e-commerce without a core AI software subscription model.
+
 For each company found, resolve and extract the active VC investors/funding participants who led or participated in this round, as well as a recruitment or general contact email ID.
       
 Also, identify 2-3 key startup team members, co-founders, or engineering leaders (e.g., CEO, CTO, VP Engineering) with realistic or real LinkedIn profile URLs.
