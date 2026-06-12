@@ -324,7 +324,7 @@ Provide the output in standard JSON format conforming strictly to the requested 
       }
     };
 
-    let config = configWithSearch;
+    let config: any = configWithSearch;
     if (useTavily) {
       const { tools, ...configWithoutSearch } = configWithSearch;
       config = configWithoutSearch;
@@ -659,18 +659,35 @@ app.get('/api/cron', async (req: Request, res: Response) => {
       apiKey
     } = req.query;
 
-    if (!email) {
+    const cronEmail = email || process.env.CRON_EMAIL;
+    if (!cronEmail) {
       return res.status(400).json({ 
-        error: 'Query parameter "email" is required for the automated weekly digest cron job.' 
+        error: 'Recipient email is required for the automated weekly digest cron job. Set "CRON_EMAIL" env var or pass "email" query param.' 
       });
     }
 
-    // Set up default parameters if not provided in URL
-    const targetRoles = roles ? (roles as string).split(',') : ['Software Engineer', 'Frontend Developer'];
-    const targetSkills = skills ? (skills as string).split(',') : ['TypeScript', 'React', 'Node.js'];
-    const locationPref = (location as string) || 'Remote';
-    const industryPref = industries ? (industries as string).split(',') : ['AI', 'SaaS'];
-    const emailProvider = (provider as string) || 'sandbox';
+    // Set up default parameters if not provided in URL or env
+    const targetRoles = roles 
+      ? (roles as string).split(',') 
+      : process.env.CRON_ROLES 
+        ? (process.env.CRON_ROLES as string).split(',') 
+        : ['Software Engineer', 'Frontend Developer'];
+
+    const targetSkills = skills 
+      ? (skills as string).split(',') 
+      : process.env.CRON_SKILLS 
+        ? (process.env.CRON_SKILLS as string).split(',') 
+        : ['TypeScript', 'React', 'Node.js'];
+
+    const locationPref = (location as string) || process.env.CRON_LOCATION || 'Remote';
+    
+    const industryPref = industries 
+      ? (industries as string).split(',') 
+      : process.env.CRON_INDUSTRIES 
+        ? (process.env.CRON_INDUSTRIES as string).split(',') 
+        : ['AI', 'SaaS'];
+
+    const emailProvider = (provider as string) || process.env.EMAIL_PROVIDER || 'sandbox';
 
     // 1. Core Gemini Discovery
     const ai = getGeminiClient();
@@ -795,7 +812,7 @@ Provide standard JSON matching our format scheme.`;
       }
     };
 
-    let configCron = configWithSearchCron;
+    let configCron: any = configWithSearchCron;
     if (useTavily) {
       const { tools, ...configWithoutSearchCron } = configWithSearchCron;
       configCron = configWithoutSearchCron;
@@ -807,7 +824,7 @@ Provide standard JSON matching our format scheme.`;
 
     // 2. Email Formatting and Dispatch
     const profile = {
-      email: email as string,
+      email: cronEmail as string,
       targetRoles,
       skills: targetSkills,
       locationPreference: locationPref,
@@ -830,7 +847,7 @@ Provide standard JSON matching our format scheme.`;
         },
         body: JSON.stringify({
           from: 'onboarding@resend.dev',
-          to: email,
+          to: cronEmail as string,
           subject,
           html: emailHtml
         })
@@ -845,7 +862,7 @@ Provide standard JSON matching our format scheme.`;
     res.json({
       success: true,
       trigger: 'weekly_cron',
-      recipient: email,
+      recipient: cronEmail as string,
       companiesFound: companies.length,
       sentInfo,
       message: 'Stateless cron job triggered successfully!'
